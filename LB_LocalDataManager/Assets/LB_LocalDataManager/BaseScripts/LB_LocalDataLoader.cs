@@ -15,7 +15,10 @@ public class LB_LocalDataLoader : MonoBehaviour
 #endif
         var data = ReadDataFromPath(path);
 
-        return (T)Convert.ChangeType(data, typeof(T));
+        var cryptoManager = new LB_CryptoManager();
+        var decryptedData = cryptoManager.Decrypt(data);
+
+        return (T)Convert.ChangeType(decryptedData, typeof(T));
     }
 
     public string ReadDataFromPath(string path)

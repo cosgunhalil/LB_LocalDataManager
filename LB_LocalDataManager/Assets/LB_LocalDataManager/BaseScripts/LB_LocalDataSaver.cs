@@ -14,6 +14,8 @@ public class LB_LocalDataSaver
 #endif
 
         var data = JsonUtility.ToJson(dataObject);
+        var cryptoManager = new LB_CryptoManager();
+        var encryptedData = cryptoManager.Encrypt(data);
 
         try
         {
@@ -21,7 +23,7 @@ public class LB_LocalDataSaver
             {
                 using (StreamWriter writer = new StreamWriter(fs))
                 {
-                    writer.Write(data);
+                    writer.Write(encryptedData);
                 }
             }
         }
