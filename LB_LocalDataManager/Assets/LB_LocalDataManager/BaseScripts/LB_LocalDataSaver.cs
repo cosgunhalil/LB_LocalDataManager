@@ -5,12 +5,12 @@ using UnityEngine;
 
 public class LB_LocalDataSaver
 {
-    public void SaveData<T>(T dataObject)
+    public void SaveData<T>(T dataObject, string fileName)
     {
 #if UNITY_EDITOR
-        string path = Application.dataPath + "/LocalData.txt";
+        string path = Application.dataPath + "/" + fileName + ".txt";
 #else
-        string path = Application.persistentDataPath + "/LocalData.txt";
+        string path = Application.persistentDataPath + "/" + fileName + ".txt";
 #endif
 
         var data = JsonUtility.ToJson(dataObject);

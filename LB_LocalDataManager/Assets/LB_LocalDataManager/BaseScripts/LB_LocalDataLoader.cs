@@ -11,7 +11,7 @@ public class LB_LocalDataLoader : MonoBehaviour
 #if UNITY_EDITOR
         string path = Application.dataPath + "/" + fileName + ".txt";
 #else
-        string path = Application.persistentDataPath + "/LocalData.txt";
+        string path = Application.persistentDataPath + "/" + fileName + ".txt";
 #endif
         var data = ReadDataFromPath(path);
         return JsonUtility.FromJson<T>(data);
