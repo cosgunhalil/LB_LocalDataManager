@@ -6,19 +6,15 @@ using UnityEngine;
 
 public class LB_LocalDataLoader : MonoBehaviour
 {
-    public T LoadData<T>()
+    public T LoadData<T>(string fileName)
     {
 #if UNITY_EDITOR
-        string path = Application.dataPath + "/LocalData.txt";
+        string path = Application.dataPath + "/" + fileName + ".txt";
 #else
         string path = Application.persistentDataPath + "/LocalData.txt";
 #endif
         var data = ReadDataFromPath(path);
-
-        var cryptoManager = new LB_CryptoManager();
-        var decryptedData = cryptoManager.Decrypt(data);
-
-        return (T)Convert.ChangeType(decryptedData, typeof(T));
+        return JsonUtility.FromJson<T>(data);
     }
 
     public string ReadDataFromPath(string path)
