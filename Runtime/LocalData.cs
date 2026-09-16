@@ -18,8 +18,70 @@ namespace LB.LocalDataManager
     /// </summary>
     public static class LocalData
     {
-        private static readonly LocalDataSaver Saver = new LocalDataSaver();
-        private static readonly LocalDataLoader Loader = new LocalDataLoader();
+        private static IDataSerializer _serializer = new JsonUtilitySerializer();
+        private static IDataProcessor _processor;
+        private static readonly MigrationRegistry Registry = new MigrationRegistry();
+        private static LocalDataSaver _saver = new LocalDataSaver(_serializer, _processor);
+        private static LocalDataLoader _loader =
+            new LocalDataLoader(_serializer, _processor, Registry);
+
+        /// <summary>
+        /// Serializer every call through this facade uses. Defaults to
+        /// <see cref="JsonUtilitySerializer"/>; setting it to <c>null</c> restores that.
+        /// <para>
+        /// Set it once during startup, before anything saves or loads: files already
+        /// written with a different serializer will not read back.
+        /// </para>
+        /// </summary>
+        public static IDataSerializer Serializer
+        {
+            get { return _serializer; }
+            set
+            {
+                _serializer = value ?? new JsonUtilitySerializer();
+                Rebuild();
+            }
+        }
+
+        /// <summary>
+        /// Stage applied between serializing and writing - <see cref="AesDataProcessor"/>,
+        /// for instance. <c>null</c> (the default) writes the serialized text as it is.
+        /// <para>
+        /// Set it once during startup, before anything saves or loads. Files written with a
+        /// processor do not load without it, and files written without one do not load with
+        /// it: changing this does not convert what is already on disk.
+        /// </para>
+        /// </summary>
+        public static IDataProcessor Processor
+        {
+            get { return _processor; }
+            set
+            {
+                _processor = value;
+                Rebuild();
+            }
+        }
+
+        /// <summary>
+        /// Migrations that bring older saves up to the current schema. Register them during
+        /// startup:
+        /// <code>
+        /// LocalData.Migrations.Register&lt;PlayerData&gt;(new RenameNameToDisplayName());
+        /// </code>
+        /// A saved type only carries a version if it implements <see cref="IVersionedData"/>;
+        /// files written before that are treated as version 0, so a 0 -&gt; 1 migration can
+        /// pick them up.
+        /// </summary>
+        public static MigrationRegistry Migrations
+        {
+            get { return Registry; }
+        }
+
+        private static void Rebuild()
+        {
+            _saver = new LocalDataSaver(_serializer, _processor);
+            _loader = new LocalDataLoader(_serializer, _processor, Registry);
+        }
 
         /// <summary>
         /// Saves <paramref name="dataObject"/> under <paramref name="fileName"/>, replacing
@@ -27,7 +89,7 @@ namespace LB.LocalDataManager
         /// </summary>
         public static bool Save<T>(T dataObject, string fileName)
         {
-            return Saver.SaveData(dataObject, fileName);
+            return _saver.SaveData(dataObject, fileName);
         }
 
         /// <summary>
@@ -36,7 +98,7 @@ namespace LB.LocalDataManager
         /// </summary>
         public static T Load<T>(string fileName)
         {
-            return Loader.LoadData<T>(fileName);
+            return _loader.LoadData<T>(fileName);
         }
 
         /// <summary>
@@ -45,7 +107,7 @@ namespace LB.LocalDataManager
         /// </summary>
         public static T Load<T>(string fileName, T fallback)
         {
-            return Loader.LoadData(fileName, fallback);
+            return _loader.LoadData(fileName, fallback);
         }
 
         /// <summary>
@@ -55,7 +117,7 @@ namespace LB.LocalDataManager
         /// </summary>
         public static bool TryLoad<T>(string fileName, out T value)
         {
-            return Loader.TryLoadData(fileName, out value);
+            return _loader.TryLoadData(fileName, out value);
         }
 
         /// <summary>

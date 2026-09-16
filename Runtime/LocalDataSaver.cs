@@ -5,17 +5,48 @@ using UnityEngine;
 namespace LB.LocalDataManager
 {
     /// <summary>
-    /// Serializes an object with <see cref="JsonUtility"/> and writes it to local storage.
+    /// Serializes an object and writes it to local storage.
     /// </summary>
     public class LocalDataSaver
     {
         /// <summary>Suffix of the scratch file the data is written to before it replaces the save.</summary>
         private const string TempSuffix = ".tmp";
 
+        private readonly IDataSerializer _serializer;
+        private readonly IDataProcessor _processor;
+
+        /// <summary>Saves with the default <see cref="JsonUtilitySerializer"/>.</summary>
+        public LocalDataSaver() : this(null, null)
+        {
+        }
+
+        /// <param name="serializer">
+        /// Serializer to write with, or <c>null</c> for the default
+        /// <see cref="JsonUtilitySerializer"/>.
+        /// </param>
+        public LocalDataSaver(IDataSerializer serializer) : this(serializer, null)
+        {
+        }
+
+        /// <param name="serializer">
+        /// Serializer to write with, or <c>null</c> for the default
+        /// <see cref="JsonUtilitySerializer"/>.
+        /// </param>
+        /// <param name="processor">
+        /// Stage applied to the serialized text before it is written - encryption, for
+        /// instance - or <c>null</c> to write it as it is.
+        /// </param>
+        public LocalDataSaver(IDataSerializer serializer, IDataProcessor processor)
+        {
+            _serializer = serializer ?? new JsonUtilitySerializer();
+            _processor = processor;
+        }
+
         /// <summary>
-        /// Saves <paramref name="dataObject"/> as JSON under <paramref name="fileName"/>,
-        /// replacing any existing file. <typeparamref name="T"/> must satisfy the
-        /// <see cref="JsonUtility"/> rules: a [Serializable] type with public fields.
+        /// Saves <paramref name="dataObject"/> under <paramref name="fileName"/>, replacing
+        /// any existing file. What <typeparamref name="T"/> may contain is up to the
+        /// serializer; the default <see cref="JsonUtilitySerializer"/> wants a
+        /// [Serializable] type with public fields.
         /// <para>
         /// The write is staged through a temporary file and only then moved into place, so a
         /// crash or a process kill during the save leaves the previous file intact instead of
@@ -30,10 +61,26 @@ namespace LB.LocalDataManager
         {
             var path = LocalDataPath.GetPathFor(fileName);
             var tempPath = path + TempSuffix;
-            var data = JsonUtility.ToJson(dataObject);
 
             try
             {
+                // Inside the try: a custom serializer is free to throw, and that is a
+                // failed save rather than an exception out of this method.
+                var data = _serializer.Serialize(dataObject);
+
+                var versioned = dataObject as IVersionedData;
+                if (versioned != null)
+                {
+                    // Stamped before the processor runs, so an encrypted save keeps its
+                    // version inside the ciphertext.
+                    data = SchemaHeader.Write(data, versioned.SchemaVersion);
+                }
+
+                if (_processor != null)
+                {
+                    data = _processor.Encode(data);
+                }
+
                 var directory = Path.GetDirectoryName(path);
                 if (!string.IsNullOrEmpty(directory))
                 {

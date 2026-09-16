@@ -5,16 +5,62 @@ using UnityEngine;
 namespace LB.LocalDataManager
 {
     /// <summary>
-    /// Reads a file written by <see cref="LocalDataSaver"/> and deserializes it with
-    /// <see cref="JsonUtility"/>.
+    /// Reads a file written by <see cref="LocalDataSaver"/> and deserializes it.
     /// </summary>
     public class LocalDataLoader
     {
+        private readonly IDataSerializer _serializer;
+        private readonly IDataProcessor _processor;
+        private readonly MigrationRegistry _migrations;
+
+        /// <summary>Loads with the default <see cref="JsonUtilitySerializer"/>.</summary>
+        public LocalDataLoader() : this(null, null)
+        {
+        }
+
+        /// <param name="serializer">
+        /// Serializer to read with, or <c>null</c> for the default
+        /// <see cref="JsonUtilitySerializer"/>. It has to match the one the file was
+        /// written with.
+        /// </param>
+        public LocalDataLoader(IDataSerializer serializer) : this(serializer, null, null)
+        {
+        }
+
+        /// <param name="serializer">Serializer to read with, or <c>null</c> for the default.</param>
+        /// <param name="processor">
+        /// Stage applied to the file contents before deserializing, or <c>null</c>.
+        /// </param>
+        public LocalDataLoader(IDataSerializer serializer, IDataProcessor processor)
+            : this(serializer, processor, null)
+        {
+        }
+
+        /// <param name="serializer">
+        /// Serializer to read with, or <c>null</c> for the default
+        /// <see cref="JsonUtilitySerializer"/>.
+        /// </param>
+        /// <param name="processor">
+        /// Stage applied to the file contents before deserializing. It has to match the one
+        /// the file was written with; a mismatch reads as a failed load.
+        /// </param>
+        /// <param name="migrations">
+        /// Migrations to bring an older file up to the current schema, or <c>null</c> for
+        /// none.
+        /// </param>
+        public LocalDataLoader(
+            IDataSerializer serializer, IDataProcessor processor, MigrationRegistry migrations)
+        {
+            _serializer = serializer ?? new JsonUtilitySerializer();
+            _processor = processor;
+            _migrations = migrations ?? new MigrationRegistry();
+        }
+
         /// <summary>
         /// Loads <paramref name="fileName"/> and deserializes it into
         /// <typeparamref name="T"/>. Returns <c>default(T)</c> when the file is missing,
-        /// unreadable or not valid JSON. Use <see cref="TryLoadData{T}"/> when those cases
-        /// need to be told apart.
+        /// unreadable or does not deserialize. Use <see cref="TryLoadData{T}"/> when those
+        /// cases need to be told apart.
         /// </summary>
         /// <exception cref="ArgumentException">
         /// <paramref name="fileName"/> is not a valid name - see <see cref="LocalDataPath.GetPathFor"/>.
@@ -45,8 +91,9 @@ namespace LB.LocalDataManager
         /// </para>
         /// <para>
         /// A file that parses but does not match <typeparamref name="T"/> still counts as
-        /// loaded: <see cref="JsonUtility"/> fills in the fields it recognizes and leaves
-        /// the rest at their defaults without reporting anything.
+        /// loaded when the serializer accepts it: <see cref="JsonUtility"/>, for one, fills
+        /// in the fields it recognizes and leaves the rest at their defaults without
+        /// reporting anything.
         /// </para>
         /// </summary>
         /// <exception cref="ArgumentException">
@@ -65,7 +112,16 @@ namespace LB.LocalDataManager
 
             try
             {
-                value = JsonUtility.FromJson<T>(data);
+                if (_processor != null)
+                {
+                    data = _processor.Decode(data);
+                }
+
+                int version;
+                data = SchemaHeader.Read(data, out version);
+                data = _migrations.Apply(typeof(T), version, data);
+
+                value = _serializer.Deserialize<T>(data);
                 return value != null;
             }
             catch (Exception ex)

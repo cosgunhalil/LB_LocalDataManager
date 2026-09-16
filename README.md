@@ -120,10 +120,100 @@ moment the filesystem commits the move.
 
 ## Serialization rules
 
-`JsonUtility` does the serializing, so the saved type must be a `[Serializable]`
-class or struct with **public fields** (or `[SerializeField]` private ones) —
-properties are not serialized, `Dictionary` is not supported, polymorphism is
-not preserved, and a collection or primitive cannot be the top-level type.
+By default `JsonUtility` does the serializing, so the saved type must be a
+`[Serializable]` class or struct with **public fields** (or `[SerializeField]`
+private ones) — properties are not serialized, `Dictionary` is not supported,
+polymorphism is not preserved, and a collection or primitive cannot be the
+top-level type.
+
+## Swapping the serializer
+
+Those rules come from the default serializer, not from the package. Implement
+`IDataSerializer` to replace it — with Newtonsoft.Json, say, and dictionaries,
+properties and polymorphism all start working:
+
+```csharp
+public class NewtonsoftSerializer : IDataSerializer
+{
+    public string Serialize<T>(T value) => JsonConvert.SerializeObject(value);
+    public T Deserialize<T>(string data) => JsonConvert.DeserializeObject<T>(data);
+}
+
+// Once, during startup, before anything saves or loads:
+LocalData.Serializer = new NewtonsoftSerializer();
+```
+
+Or pass one to an instance: `new LocalDataSaver(mySerializer)`. Setting
+`LocalData.Serializer = null` restores the default.
+
+Files carry no record of how they were written, so a serializer swap does not
+migrate what is already on disk: existing saves stop loading unless the new
+serializer happens to read the old format. Want indented, readable saves while
+developing? `LocalData.Serializer = new JsonUtilitySerializer(prettyPrint: true)`.
+
+## Encrypting saves
+
+`IDataProcessor` is a text-to-text stage applied after serializing and before
+deserializing — encryption, compression, whatever you need. The package ships
+`AesDataProcessor` (AES-CBC, HMAC-SHA256, PBKDF2 key derivation, random salt and
+IV per save):
+
+```csharp
+// Once, during startup:
+LocalData.Processor = new AesDataProcessor("a passphrase from your game");
+```
+
+A wrong password or an edited file fails the integrity check, so `TryLoad`
+returns `false` instead of handing back data that decrypted into nonsense.
+
+**This is protection against casual save editing, not security.** Your password
+ships inside the build and can be recovered from it. It stops a player editing
+coins in a text editor; it does not stop a determined one, so never put anything
+in a save file that you would not hand the player outright.
+
+Switching the processor on or off does not convert existing files: a save
+written in plain text will not load with a processor set, and vice versa.
+
+## Schema versions and migrations
+
+When a saved type changes shape, old files on players' devices do not. Implement
+`IVersionedData` and the version is stamped into the file:
+
+```csharp
+[Serializable]
+public class PlayerData : IVersionedData
+{
+    public int SchemaVersion { get { return 2; } }
+
+    public int Id;
+    public string DisplayName;   // called "Name" in version 1
+}
+```
+
+Then register a migration, which rewrites the serialized text — the old shape
+is exactly what no longer deserializes into the new type:
+
+```csharp
+public class RenameNameToDisplayName : IDataMigration
+{
+    public int FromVersion { get { return 1; } }
+    public int ToVersion { get { return 2; } }
+
+    public string Migrate(string data) => data.Replace("\"Name\":", "\"DisplayName\":");
+}
+
+// Once, during startup:
+LocalData.Migrations.Register<PlayerData>(new RenameNameToDisplayName());
+```
+
+Migrations chain: a version 1 file with `1->2` and `2->3` registered runs through
+both before loading. Files written before you adopted `IVersionedData` count as
+version 0, so a `0->1` migration picks them up too. A file whose version has no
+migration registered is loaded as it is — fields that did not change still
+arrive, the rest stay at their defaults.
+
+Types that do not implement `IVersionedData` are written exactly as before, with
+no header.
 
 ## Running the tests
 
