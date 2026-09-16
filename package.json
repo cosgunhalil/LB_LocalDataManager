@@ -1,0 +1,27 @@
+{
+  "name": "com.cosgunhalil.localdatamanager",
+  "version": "1.0.0",
+  "displayName": "Local Data Manager",
+  "description": "Generic local data saver and loader for Unity. Serializes your classes with JsonUtility and writes them to local storage, and reads them back with a single generic call.",
+  "unity": "2021.3",
+  "license": "MIT",
+  "author": {
+    "name": "Halil Cosgun",
+    "url": "https://github.com/cosgunhalil"
+  },
+  "keywords": [
+    "save",
+    "load",
+    "serialization",
+    "json",
+    "persistence",
+    "local data"
+  ],
+  "samples": [
+    {
+      "displayName": "Basic Usage",
+      "description": "Saves a PlayerData object and loads it straight back on Start.",
+      "path": "Samples~/BasicUsage"
+    }
+  ]
+}
