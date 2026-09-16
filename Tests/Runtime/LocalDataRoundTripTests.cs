@@ -136,11 +136,5 @@ namespace LB.LocalDataManager.Tests
             LogAssert.ignoreFailingMessages = false;
             Assert.IsNull(loaded);
         }
-
-        [Test]
-        public void ReadDataFromPath_ReturnsNullWhenFileIsMissing()
-        {
-            Assert.IsNull(new LocalDataLoader().ReadDataFromPath(_path));
-        }
     }
 }

@@ -40,14 +40,34 @@ public class PlayerData
     public string Name;
 }
 
-// Save
-var saver = new LocalDataSaver();
-saver.SaveData(new PlayerData { Id = 1, Name = "Halil" }, "PlayerData");
+LocalData.Save(new PlayerData { Id = 1, Name = "Halil" }, "PlayerData");
 
-// Load
-var loader = new LocalDataLoader();
-var playerData = loader.LoadData<PlayerData>("PlayerData");
+var playerData = LocalData.Load<PlayerData>("PlayerData");
 ```
+
+`Load` hands back `default(T)` when there is no save. When "no save yet" and
+"the save is damaged" need different handling, ask:
+
+```csharp
+PlayerData playerData;
+if (LocalData.TryLoad("PlayerData", out playerData))
+{
+    Continue(playerData);
+}
+else if (LocalData.Exists("PlayerData"))
+{
+    ShowCorruptSaveDialog();     // the file is there but did not parse
+}
+else
+{
+    StartNewGame();
+}
+```
+
+Or take a fallback and move on: `LocalData.Load("PlayerData", PlayerData.New())`.
+
+`LocalDataSaver` and `LocalDataLoader` stay public if you would rather hold and
+inject instances than call the static entry point.
 
 Import the **Basic Usage** sample from the package's page in the Package Manager
 window for a runnable version.
@@ -56,11 +76,18 @@ window for a runnable version.
 
 | Member | Behaviour |
 | --- | --- |
-| `bool LocalDataSaver.SaveData<T>(T dataObject, string fileName)` | Serializes and writes, replacing any existing file. Returns `false` and logs an error when the write fails; throws `ArgumentException` for an invalid file name. |
-| `T LocalDataLoader.LoadData<T>(string fileName)` | Reads and deserializes. Returns `default(T)` when the file is missing, unreadable or empty. |
-| `string LocalDataLoader.ReadDataFromPath(string path)` | Raw file contents, or `null` when the file cannot be read. |
-| `string LocalDataPath.GetPathFor(string fileName)` | Full path a given file name resolves to. |
+| `bool LocalData.Save<T>(T dataObject, string fileName)` | Serializes and writes, replacing any existing file. Returns `false` and logs an error when the write fails. |
+| `T LocalData.Load<T>(string fileName)` | Reads and deserializes, or `default(T)` when there is nothing to load. |
+| `T LocalData.Load<T>(string fileName, T fallback)` | Same, but returns `fallback` instead of `default(T)`. |
+| `bool LocalData.TryLoad<T>(string fileName, out T value)` | `false` when the file is missing, unreadable, empty or does not parse. |
+| `bool LocalData.Exists(string fileName)` | Whether the file has been saved. Says nothing about whether it still parses. |
+| `bool LocalData.Delete(string fileName)` | `true` when a file was there and is now gone; `false` when there was nothing to delete. |
+| `string LocalData.GetPath(string fileName)` | Full path a given file name resolves to. |
 | `string LocalDataPath.RootDirectory` | Directory the files are written to. |
+
+Every member above throws `ArgumentException` for an invalid file name. The same
+operations exist on the injectable `LocalDataSaver.SaveData<T>` and
+`LocalDataLoader.LoadData<T>` / `TryLoadData<T>`.
 
 `Tools > Local Data Manager` in the editor menu opens or logs that directory.
 

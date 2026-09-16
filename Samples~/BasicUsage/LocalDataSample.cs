@@ -3,7 +3,7 @@ using UnityEngine;
 namespace LB.LocalDataManager.Samples
 {
     /// <summary>
-    /// Saves a <see cref="PlayerData"/> and loads it straight back. Drop this on a
+    /// Saves a <see cref="PlayerData"/>, loads it back, and deletes it again. Drop this on a
     /// GameObject and press Play.
     /// </summary>
     public class LocalDataSample : MonoBehaviour
@@ -12,20 +12,28 @@ namespace LB.LocalDataManager.Samples
 
         private void Start()
         {
-            var playerData = new PlayerData { Id = 1, Name = "Halil" };
+            Debug.Log("Saving to: " + LocalData.GetPath(FileName));
 
-            var saver = new LocalDataSaver();
-            if (!saver.SaveData(playerData, FileName))
+            if (!LocalData.Save(new PlayerData { Id = 1, Name = "Halil" }, FileName))
             {
                 return;
             }
 
-            var loader = new LocalDataLoader();
-            var loadedData = loader.LoadData<PlayerData>(FileName);
+            // TryLoad tells "no save yet" apart from "the save is damaged"; Load with a
+            // fallback is the shorter version when you do not care which it was.
+            PlayerData loaded;
+            if (LocalData.TryLoad(FileName, out loaded))
+            {
+                Debug.Log(loaded.Id);
+                Debug.Log(loaded.Name);
+            }
+            else
+            {
+                Debug.Log("Nothing saved yet.");
+            }
 
-            Debug.Log(loadedData.Id);
-            Debug.Log(loadedData.Name);
-            Debug.Log("Saved to: " + LocalDataPath.GetPathFor(FileName));
+            Debug.Log("Exists: " + LocalData.Exists(FileName));
+            Debug.Log("Deleted: " + LocalData.Delete(FileName));
         }
     }
 }
