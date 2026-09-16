@@ -56,7 +56,7 @@ window for a runnable version.
 
 | Member | Behaviour |
 | --- | --- |
-| `bool LocalDataSaver.SaveData<T>(T dataObject, string fileName)` | Serializes and writes, overwriting any existing file. Returns `false` and logs an error when the write fails. |
+| `bool LocalDataSaver.SaveData<T>(T dataObject, string fileName)` | Serializes and writes, replacing any existing file. Returns `false` and logs an error when the write fails; throws `ArgumentException` for an invalid file name. |
 | `T LocalDataLoader.LoadData<T>(string fileName)` | Reads and deserializes. Returns `default(T)` when the file is missing, unreadable or empty. |
 | `string LocalDataLoader.ReadDataFromPath(string path)` | Raw file contents, or `null` when the file cannot be read. |
 | `string LocalDataPath.GetPathFor(string fileName)` | Full path a given file name resolves to. |
@@ -66,16 +66,30 @@ window for a runnable version.
 
 ## Where the files go
 
+Everything is written under `Application.persistentDataPath`, in the editor and
+in a player build alike — so what you see while testing is what ships, and
+nothing lands in your project's `Assets/` folder.
+
 Pass a **bare file name**: the directory and the `.txt` extension are added for
-you, so `"PlayerData"` — not `"PlayerData.txt"`.
+you, so `"PlayerData"` — not `"PlayerData.txt"`. Forward slashes make
+subfolders, and missing folders are created for you:
 
-| Context | Directory |
-| --- | --- |
-| Editor | `Application.dataPath` (your project's `Assets/` folder) |
-| Player build | `Application.persistentDataPath` |
+```csharp
+saver.SaveData(slot, "slots/autosave");   // <persistentDataPath>/slots/autosave.txt
+```
 
-Editor and player therefore do not share saved data, and files saved while in the
-editor show up as assets in your project.
+A file name is rejected with an `ArgumentException` when it is empty, absolute
+(`/save`, `C:/save`), navigates out of the data folder (`../save`), or contains
+something that is not portable across platforms (`< > : " | ? *`, control
+characters, a trailing dot or space). Unity's own platforms disagree about these,
+so they fail the same way everywhere instead of only on Windows.
+
+## Crash safety
+
+`SaveData` writes to a staging file and only then moves it over the target, so a
+crash, a force-quit or an OS kill mid-save leaves the previous file untouched
+rather than truncating it. It does not protect against a power cut at the exact
+moment the filesystem commits the move.
 
 ## Serialization rules
 

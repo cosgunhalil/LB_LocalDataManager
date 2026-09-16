@@ -15,6 +15,9 @@ namespace LB.LocalDataManager
         /// <typeparamref name="T"/>. Returns <c>default(T)</c> when the file is missing,
         /// unreadable or empty.
         /// </summary>
+        /// <exception cref="ArgumentException">
+        /// <paramref name="fileName"/> is not a valid name - see <see cref="LocalDataPath.GetPathFor"/>.
+        /// </exception>
         public T LoadData<T>(string fileName)
         {
             var path = LocalDataPath.GetPathFor(fileName);

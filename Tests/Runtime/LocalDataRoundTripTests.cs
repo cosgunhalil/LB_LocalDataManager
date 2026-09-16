@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using NUnit.Framework;
 using UnityEngine.TestTools;
-using UnityEngine;
 
 namespace LB.LocalDataManager.Tests
 {
@@ -16,26 +15,33 @@ namespace LB.LocalDataManager.Tests
         }
 
         private string _fileName;
+        private string _path;
 
         [SetUp]
         public void SetUp()
         {
             _fileName = "__ldm_test_" + Guid.NewGuid().ToString("N");
+            _path = LocalDataPath.GetPathFor(_fileName);
         }
 
         [TearDown]
         public void TearDown()
         {
-            var path = LocalDataPath.GetPathFor(_fileName);
+            // Covers the file itself, the staging file, and the folder a nested name creates.
+            DeletePath(_path);
+            DeletePath(_path + ".tmp");
+            DeletePath(LocalDataPath.RootDirectory + "/" + _fileName);
+        }
+
+        private static void DeletePath(string path)
+        {
             if (File.Exists(path))
             {
                 File.Delete(path);
             }
-
-            // The editor writes into Assets/, so Unity generates a .meta next to the file.
-            if (File.Exists(path + ".meta"))
+            else if (Directory.Exists(path))
             {
-                File.Delete(path + ".meta");
+                Directory.Delete(path, true);
             }
         }
 
@@ -45,7 +51,7 @@ namespace LB.LocalDataManager.Tests
             var saved = new LocalDataSaver().SaveData(new Fixture { Id = 7, Name = "Ada" }, _fileName);
 
             Assert.IsTrue(saved);
-            FileAssert.Exists(LocalDataPath.GetPathFor(_fileName));
+            FileAssert.Exists(_path);
         }
 
         [Test]
@@ -74,30 +80,67 @@ namespace LB.LocalDataManager.Tests
         }
 
         [Test]
+        public void SaveData_LeavesNoStagingFileBehind()
+        {
+            new LocalDataSaver().SaveData(new Fixture { Id = 1, Name = "Ada" }, _fileName);
+
+            FileAssert.DoesNotExist(_path + ".tmp");
+        }
+
+        [Test]
+        public void SaveData_CreatesMissingFoldersForANestedName()
+        {
+            var nested = _fileName + "/slots/autosave";
+
+            var saved = new LocalDataSaver().SaveData(new Fixture { Id = 3, Name = "nested" }, nested);
+
+            Assert.IsTrue(saved);
+            Assert.AreEqual(3, new LocalDataLoader().LoadData<Fixture>(nested).Id);
+        }
+
+        [Test]
+        public void SaveData_KeepsThePreviousFileWhenTheWriteFails()
+        {
+            var saver = new LocalDataSaver();
+            saver.SaveData(new Fixture { Id = 1, Name = "good" }, _fileName);
+
+            // A folder sitting where the staging file goes makes the write fail after the
+            // previous save already exists - the case that used to truncate it.
+            Directory.CreateDirectory(_path + ".tmp");
+            LogAssert.ignoreFailingMessages = true;
+
+            var saved = saver.SaveData(new Fixture { Id = 2, Name = "bad" }, _fileName);
+
+            LogAssert.ignoreFailingMessages = false;
+            Assert.IsFalse(saved);
+
+            var loaded = new LocalDataLoader().LoadData<Fixture>(_fileName);
+            Assert.AreEqual(1, loaded.Id, "the previous save must survive a failed write");
+            Assert.AreEqual("good", loaded.Name);
+        }
+
+        [Test]
         public void LoadData_ReturnsDefaultWhenFileIsMissing()
         {
+            Assert.IsNull(new LocalDataLoader().LoadData<Fixture>(_fileName));
+        }
+
+        [Test]
+        public void LoadData_ReturnsDefaultWhenTheFileIsNotJson()
+        {
+            File.WriteAllText(_path, "this is not json");
+            LogAssert.ignoreFailingMessages = true;
+
             var loaded = new LocalDataLoader().LoadData<Fixture>(_fileName);
 
+            LogAssert.ignoreFailingMessages = false;
             Assert.IsNull(loaded);
         }
 
         [Test]
         public void ReadDataFromPath_ReturnsNullWhenFileIsMissing()
         {
-            var data = new LocalDataLoader().ReadDataFromPath(LocalDataPath.GetPathFor(_fileName));
-
-            Assert.IsNull(data);
-        }
-
-        [Test]
-        public void SaveData_ReturnsFalseOnAnInvalidFileName()
-        {
-            LogAssert.ignoreFailingMessages = true;
-
-            var saved = new LocalDataSaver().SaveData(new Fixture(), "missing-folder/nested");
-
-            LogAssert.ignoreFailingMessages = false;
-            Assert.IsFalse(saved);
+            Assert.IsNull(new LocalDataLoader().ReadDataFromPath(_path));
         }
     }
 }
